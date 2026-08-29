@@ -1,0 +1,49 @@
+name: Post Clash of Clans News
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: coc-news-bot
+  cancel-in-progress: false
+
+jobs:
+  post-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore database cache
+        uses: actions/cache@v4
+        with:
+          path: data/bot.db
+          key: coc-bot-db-${{ github.run_id }}
+          restore-keys: |
+            coc-bot-db-
+
+      - name: Run bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+        run: python -u main.py
+
+      - name: Commit updated database
+        run: |
+          git config user.name "coc-news-bot"
+          git config user.email "actions@github.com"
+          git add data/bot.db
+          git diff --staged --quiet || git commit -m "chore: update posted items database [skip ci]"
+          git push
