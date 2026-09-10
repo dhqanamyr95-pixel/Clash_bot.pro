@@ -4,6 +4,9 @@ import json
 import requests
 
 import config
+import dedupe_guard
+
+_guard = dedupe_guard.DuplicateGuard()
 
 
 def _inline_keyboard(link: str):
@@ -11,14 +14,26 @@ def _inline_keyboard(link: str):
 
 
 def send_post(caption: str, image_url: str, source_link: str) -> bool:
+    if _guard.is_duplicate(caption):
+        print("!!! خبر تکراری شناسایی شد، ارسال نشد !!!", flush=True)
+        return False
+
     reply_markup = _inline_keyboard(source_link) if source_link else None
 
+    sent = False
     if image_url:
         if _send_photo(image_url, caption, reply_markup):
-            return True
-        print("!!! ارسال عکس شکست خورد، تلاش با پیام متنی !!!", flush=True)
+            sent = True
+        else:
+            print("!!! ارسال عکس شکست خورد، تلاش با پیام متنی !!!", flush=True)
 
-    return _send_message(caption, reply_markup)
+    if not sent:
+        sent = _send_message(caption, reply_markup)
+
+    if sent:
+        _guard.mark_sent(caption)
+
+    return sent
 
 
 def _send_photo(image_url, caption, reply_markup):
