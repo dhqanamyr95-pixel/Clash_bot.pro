@@ -7,6 +7,10 @@ from deep_translator import GoogleTranslator
 
 from bot_data import classify_category
 
+# گوگل ترنسلیت حداکثر ۵ درخواست در ثانیه اجازه می‌دهد.
+# این مکث قبل از هر درخواست، باعث می‌شود از این سقف رد نشویم.
+TRANSLATE_DELAY_SECONDS = 1.2
+
 
 def clean_raw_text(text: str) -> str:
     """رفع مشکل HTML entities مثل &#32; و امثالش"""
@@ -22,6 +26,9 @@ def translate_to_fa(text: str) -> str:
     if len(text) > 4500:
         text = text[:4500]
 
+    # مکث قبل از هر درخواست ترجمه تا به سقف نرخ گوگل (۵ درخواست/ثانیه) نخوریم
+    time.sleep(TRANSLATE_DELAY_SECONDS)
+
     last_error = None
     for attempt in range(3):
         try:
@@ -32,7 +39,8 @@ def translate_to_fa(text: str) -> str:
         except Exception as exc:
             last_error = exc
             print(f"!!! تلاش {attempt+1} ترجمه ناموفق: {exc} !!!", flush=True)
-            time.sleep(2 * (attempt + 1))
+            # در تلاش‌های بعدی، مکث بیشتری می‌کنیم (backoff)
+            time.sleep(5 * (attempt + 1))
 
     print(f"!!! ترجمه بعد از سه تلاش شکست خورد: {last_error} !!!", flush=True)
     return text
