@@ -1,23 +1,41 @@
-"""ترجمه به فارسی و ساخت متن نهایی پست (دوزبانه: انگلیسی + فارسی)."""
+"""ترجمه به فارسی و ساخت متن نهایی پست (دوزبانه: انگلیسی + فارسی)"""
+
+import html
+import time
 
 from deep_translator import GoogleTranslator
 
-import config
 from bot_data import classify_category
 
-_translator = GoogleTranslator(source="en", target="fa")
+
+def clean_raw_text(text: str) -> str:
+    """رفع مشکل HTML entities مثل &#32; و امثالش"""
+    if not text:
+        return text
+    return html.unescape(text)
 
 
 def translate_to_fa(text: str) -> str:
     if not text or not text.strip():
         return text
-    try:
-        if len(text) > 4500:
-            text = text[:4500]
-        return _translator.translate(text)
-    except Exception as exc:
-        print(f"!!! ترجمه ناموفق: {exc} !!!", flush=True)
-        return text
+
+    if len(text) > 4500:
+        text = text[:4500]
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            translator = GoogleTranslator(source="en", target="fa")
+            result = translator.translate(text)
+            if result and result.strip():
+                return result
+        except Exception as exc:
+            last_error = exc
+            print(f"!!! تلاش {attempt+1} ترجمه ناموفق: {exc} !!!", flush=True)
+            time.sleep(2 * (attempt + 1))
+
+    print(f"!!! ترجمه بعد از سه تلاش شکست خورد: {last_error} !!!", flush=True)
+    return text
 
 
 def _escape_md(text: str) -> str:
@@ -29,36 +47,34 @@ def _escape_md(text: str) -> str:
 
 def build_caption(item: dict) -> str:
     """
-    متن نهایی پست را می‌سازد: ابتدا متن اصلی انگلیسی، سپس ترجمه فارسی زیر آن.
+    caption نهایی رو می‌سازد: ابتدا متن اصلی انگلیسی، سپس ترجمه فارسی زیر آن.
     این‌طوری هم کاربران فارسی‌زبان و هم انگلیسی‌زبان می‌توانند بخوانند.
     """
-    category = classify_category(item)
+    raw_title = clean_raw_text(item.get("title", ""))
+    raw_body = clean_raw_text(item.get("summary", ""))
 
-    en_title = item["title"].strip()
-    en_summary = item["summary"].strip()
-    fa_title = translate_to_fa(en_title)
-    fa_summary = translate_to_fa(en_summary)
+    category = classify_category(raw_title + " " + raw_body)
 
-    source = _escape_md(item.get("source", ""))
-    footer = _escape_md(config.FOOTER_TEXT)
-    hashtags = _escape_md(config.HASHTAGS_DEFAULT)
+    fa_title = translate_to_fa(raw_title)
+    fa_body = translate_to_fa(raw_body) if raw_body else ""
 
-    parts = [f"*{category}*", ""]
+    en_title = _escape_md(raw_title)
+    fa_title_esc = _escape_md(fa_title)
+    en_body = _escape_md(raw_body) if raw_body else ""
+    fa_body_esc = _escape_md(fa_body) if fa_body else ""
 
-    # بخش انگلیسی
-    parts.append(f"🇬🇧 *{_escape_md(en_title)}*")
-    if en_summary:
-        parts.append(_escape_md(en_summary))
-    parts.append("")
+    lines = [category, ""]
+    lines.append(f"🇬🇧 {en_title}")
+    if en_body:
+        lines.append(en_body)
+    lines.append("")
+    lines.append(f"🇮🇷 {fa_title_esc}")
+    if fa_body_esc:
+        lines.append(fa_body_esc)
+    lines.append("")
+    lines.append("Source / منبع: Reddit r/ClashOfClans")
+    lines.append("\\#کلش\\_اف\\_کلنز \\#ClashOfClans")
+    lines.append("")
+    lines.append("📢 Join / عضو شوید: @Clash1sk")
 
-    # بخش فارسی
-    parts.append(f"🇮🇷 *{_escape_md(fa_title)}*")
-    if fa_summary:
-        parts.append(_escape_md(fa_summary))
-
-    parts += ["", f"Source / منبع: {source}", hashtags, "", footer]
-
-    caption = "\n".join(parts)
-    if len(caption) > config.MAX_TEXT_LENGTH:
-        caption = caption[: config.MAX_TEXT_LENGTH - 1] + "…"
-    return caption
+    return "\n".join(lines)
