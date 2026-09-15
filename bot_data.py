@@ -125,7 +125,19 @@ def passes_filter(item: dict) -> bool:
 
 
 def classify_category(item: dict) -> str:
-    text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+    """
+    این تابع همیشه باید یک دیکشنری خبر (item) بگیرد، نه یک رشته.
+    اگر جایی به‌اشتباه یک رشته (مثل raw_title + raw_body) بهش پاس داده شود،
+    خطای AttributeError: 'str' object has no attribute 'get' می‌دهد —
+    دقیقاً همان باگی که در ران #127 رخ داد.
+    برای ایمنی بیشتر، اینجا یک fallback هم اضافه شده تا اگر رشته پاس داده شد،
+    برنامه کرش نکند.
+    """
+    if isinstance(item, str):
+        text = item.lower()
+    else:
+        text = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+
     if any(w in text for w in ["balance", "patch", "update"]):
         return "🛠️ Update / آپدیت"
     if any(w in text for w in ["event", "season", "sneak peek"]):
