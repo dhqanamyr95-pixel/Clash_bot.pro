@@ -53,7 +53,11 @@ def build_caption(item: dict) -> str:
     raw_title = clean_raw_text(item.get("title", ""))
     raw_body = clean_raw_text(item.get("summary", ""))
 
-    category = classify_category(raw_title + " " + raw_body)
+    # نکته‌ی مهم: قبلاً اینجا یک رشته (raw_title + raw_body) پاس داده می‌شد
+    # که چون classify_category در bot_data.py یک دیکشنری (item) انتظار دارد،
+    # باعث AttributeError: 'str' object has no attribute 'get' و کرش کل ران می‌شد.
+    # الان مستقیم خود item (که از قبل title و summary را دارد) پاس داده می‌شود.
+    category = classify_category(item)
 
     fa_title = translate_to_fa(raw_title)
     fa_body = translate_to_fa(raw_body) if raw_body else ""
