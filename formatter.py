@@ -3,7 +3,8 @@
 import html
 import time
 
-from deep_translator import GoogleTranslator
+import requests
+from deep_translator import GoogleTranslator, MyMemoryTranslator
 
 from bot_data import classify_category
 
@@ -19,6 +20,18 @@ def clean_raw_text(text: str) -> str:
     return html.unescape(text)
 
 
+def _translate_libre(text: str) -> str:
+    """لایه‌ی سوم: LibreTranslate — یه سرویس متن‌باز رایگان که پاراگراف بلند رو هم قبول می‌کنه"""
+    response = requests.post(
+        "https://libretranslate.de/translate",
+        data={"q": text, "source": "en", "target": "fa", "format": "text"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    result = response.json().get("translatedText", "")
+    return result
+
+
 def translate_to_fa(text: str) -> str:
     if not text or not text.strip():
         return text
@@ -29,20 +42,39 @@ def translate_to_fa(text: str) -> str:
     # مکث قبل از هر درخواست ترجمه تا به سقف نرخ گوگل (۵ درخواست/ثانیه) نخوریم
     time.sleep(TRANSLATE_DELAY_SECONDS)
 
-    last_error = None
-    for attempt in range(3):
+    # لایه ۱: MyMemory (رایگان، کم‌ترافیک)
+    for attempt in range(2):
         try:
-            translator = GoogleTranslator(source="en", target="fa")
-            result = translator.translate(text)
+            result = MyMemoryTranslator(
+                source="en-GB", target="fa-IR", email="youremail@example.com"
+            ).translate(text)
             if result and result.strip():
                 return result
         except Exception as exc:
-            last_error = exc
-            print(f"!!! تلاش {attempt+1} ترجمه ناموفق: {exc} !!!", flush=True)
-            # در تلاش‌های بعدی، مکث بیشتری می‌کنیم (backoff)
-            time.sleep(5 * (attempt + 1))
+            print(f"!!! MyMemory تلاش {attempt+1} ناموفق: {exc} !!!", flush=True)
+            time.sleep(3 * (attempt + 1))
 
-    print(f"!!! ترجمه بعد از سه تلاش شکست خورد: {last_error} !!!", flush=True)
+    # لایه ۲: گوگل ترنسلیت
+    for attempt in range(3):
+        try:
+            result = GoogleTranslator(source="en", target="fa").translate(text)
+            if result and result.strip():
+                return result
+        except Exception as exc:
+            print(f"!!! گوگل تلاش {attempt+1} ناموفق: {exc} !!!", flush=True)
+            time.sleep(8 * (attempt + 1))
+
+    # لایه ۳: LibreTranslate (پاراگراف بلند رو هم پشتیبانی می‌کنه)
+    for attempt in range(2):
+        try:
+            result = _translate_libre(text)
+            if result and result.strip():
+                return result
+        except Exception as exc:
+            print(f"!!! LibreTranslate تلاش {attempt+1} ناموفق: {exc} !!!", flush=True)
+            time.sleep(3 * (attempt + 1))
+
+    print("!!! هر سه مترجم شکست خوردند، متن انگلیسی باقی می‌ماند !!!", flush=True)
     return text
 
 
