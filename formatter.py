@@ -39,10 +39,19 @@ def translate_to_fa(text: str) -> str:
     if len(text) > 4500:
         text = text[:4500]
 
-    # مکث قبل از هر درخواست ترجمه تا به سقف نرخ گوگل (۵ درخواست/ثانیه) نخوریم
     time.sleep(TRANSLATE_DELAY_SECONDS)
 
-    # لایه ۱: MyMemory (رایگان، کم‌ترافیک)
+    # لایه ۱: گوگل ترنسلیت (بالاترین کیفیت، اولویت اول)
+    for attempt in range(3):
+        try:
+            result = GoogleTranslator(source="en", target="fa").translate(text)
+            if result and result.strip():
+                return result
+        except Exception as exc:
+            print(f"!!! گوگل تلاش {attempt+1} ناموفق: {exc} !!!", flush=True)
+            time.sleep(8 * (attempt + 1))
+
+    # لایه ۲: MyMemory (fallback، ممکنه ترجمه‌ی ناقص بده برای جمله‌های غیرمعمول)
     for attempt in range(2):
         try:
             result = MyMemoryTranslator(
@@ -54,17 +63,7 @@ def translate_to_fa(text: str) -> str:
             print(f"!!! MyMemory تلاش {attempt+1} ناموفق: {exc} !!!", flush=True)
             time.sleep(3 * (attempt + 1))
 
-    # لایه ۲: گوگل ترنسلیت
-    for attempt in range(3):
-        try:
-            result = GoogleTranslator(source="en", target="fa").translate(text)
-            if result and result.strip():
-                return result
-        except Exception as exc:
-            print(f"!!! گوگل تلاش {attempt+1} ناموفق: {exc} !!!", flush=True)
-            time.sleep(8 * (attempt + 1))
-
-    # لایه ۳: LibreTranslate (پاراگراف بلند رو هم پشتیبانی می‌کنه)
+    # لایه ۳: LibreTranslate (آخرین راه‌حل)
     for attempt in range(2):
         try:
             result = _translate_libre(text)
